@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GamelanSwara 2.2: Ensiklopedia Interaktif Gamelan Bali</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Kreon:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.5.4/dist/speech-commands.min.js"></script>
+    <style>
+        :root {
+            --bg-main: #fdfcfb;
+            --text-main: #332d29;
+            --accent-primary: #f97316; /* Oranye */
+            --accent-secondary: #fbbf24; /* Kuning Amber */
+            --danger-color: #ef4444; /* Merah */
+        }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-main); }
+        .font-kreon { font-family: 'Kreon', serif; }
+
+        .gamelan-card {
+            display: flex; align-items: center; padding: 0.75rem; background-color: white;
+            border-radius: 0.75rem; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.07);
+            transition: all 0.2s ease-out; cursor: pointer;
+        }
+        .gamelan-card:hover {
+            transform: translateY(-2px); box-shadow: 0 4px 12px 0 rgba(0,0,0,0.1);
+        }
+        .gamelan-card img {
+            width: 5rem; height: 5rem; border-radius: 0.5rem; object-fit: cover; flex-shrink: 0;
+        }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.6);
+            display: flex; align-items: center; justify-content: center; z-index: 50;
+            opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+        }
+        .modal-overlay.visible { opacity: 1; pointer-events: auto; }
+        .modal-content {
+            background: var(--bg-main); padding: 2rem; border-radius: 1rem; max-width: 90vw;
+            width: 600px; max-height: 90vh; overflow-y: auto; transform: scale(0.95);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.visible .modal-content { transform: scale(1); }
+
+        .gamelan-description {
+            display: none; /* Sembunyikan default */
+            padding: 1.5rem; background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px 0 rgba(0,0,0,0.07);
+            text-align: left;
+            animation: fadeIn 0.5s ease;
+            margin-top: 1.5rem;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="app" class="max-w-4xl mx-auto p-4 md:p-8">
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-kreon font-bold text-stone-800">Gamelan<span class="text-orange-500">Swara</span></h1>
+            <p class="text-lg text-stone-500 mt-2">Ketahui Gamelan di Sekitar Anda dengan Ai Pendeteksi Suara Gamelan</p>
+        </header>
+
+        <main>
+            
+            <section id="sound-detector" class="mb-12">
+                <div class="bg-white p-6 rounded-xl shadow-lg text-center">
+                    <h1 class="text-3xl md:text-4xl font-kreon font-bold text-stone-800">Pendeteksi Suara Gamelan</h1>
+                    <p id="detector-status" class="text-stone-500 my-3 min-h-[20px]">Klik "Mulai" untuk mendeteksi suara gamelan</p>
+                    
+                    <div id="detector-result" class="text-3xl font-bold text-orange-600 bg-orange-50 border-2 border-orange-100 rounded-lg p-6 min-h-[80px] flex items-center justify-center w-full max-w-md mx-auto transition-all duration-300">-</div>
+
+                    <button id="detector-action-btn" class="mt-6 bg-orange-500 text-white hover:bg-orange-600 px-6 py-3 rounded-full font-bold transition-all flex items-center gap-2 mx-auto text-lg shadow-md hover:shadow-lg disabled:bg-stone-400 disabled:cursor-not-allowed">
+                        <svg id="detector-btn-icon" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
+                        <span id="detector-btn-text">Mulai</span>
+                    </button>
+
+                    <div id="description-container" class="mt-6 max-w-md mx-auto">
+                        <div id="Gangsa" class="gamelan-description">
+                            <h2 class="text-xl font-kreon font-bold text-orange-600">Gangsa</h2>
+                            <p class="text-stone-700">Instrumen melodi yang dimainkan dengan pemukul.</p>
+                        </div>
+                        <div id="Reong" class="gamelan-description">
+                            <h2 class="text-xl font-kreon font-bold text-orange-600">Reong</h2>
+                            <p class="text-stone-700">Sekumpulan gong kecil berpencu yang dimainkan bersama untuk hiasan melodi.</p>
+                        </div>
+                        <div id="Penyacah" class="gamelan-description">
+                            <h2 class="text-xl font-kreon font-bold text-orange-600">Penyacah</h2>
+                            <p class="text-stone-700">Instrumen yang memainkan pola interlocking (kotekan) sebagai iringan ritmis.</p>
+                        </div>
+                         <div id="Jegog" class="gamelan-description">
+                            <h2 class="text-xl font-kreon font-bold text-orange-600">Jegog</h2>
+                            <p class="text-stone-700">Instrumen berukuran besar untuk suara nada rendah (bass).</p>
+                        </div>
+                         <div id="Kempur" class="gamelan-description">
+                            <h2 class="text-xl font-kreon font-bold text-orange-600">Kempur</h2>
+                            <p class="text-stone-700">Gong besar yang digunakan untuk menandai irama utama.</p>
+                        </div>
+                         <div id="Kecek" class="gamelan-description">
+                            <h2 class="text-xl font-kreon font-bold text-orange-600">Kecek</h2>
+                            <p class="text-stone-700">Simbal kecil untuk menjaga tempo dan pengendali irama.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <section id="gamelan-display">
+                <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
+                     <h2 class="text-2xl font-kreon font-semibold text-stone-700">Ensiklopedia Gamelan</h2>
+                    <div class="relative">
+                        <input type="text" id="search-gamelan" placeholder="Cari nama gamelan..." class="w-full sm:w-64 p-2 pl-8 border border-stone-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                        <i data-lucide="search" class="absolute left-2 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4"></i>
+                    </div>
+                </div>
+                <div id="gamelan-list-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+            </section>
+        </main>
+
+        <footer class="text-center mt-16 pt-8 border-t border-stone-200">
+            <p class="text-stone-500">&copy; 2025 GamelanSwara. Sebuah proyek dokumentasi budaya digital.</p>
+        </footer>
+    </div>
+
+    <div id="modal-overlay" class="modal-overlay">
+        <div id="modal-content" class="modal-content"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const gamelanData = [
+                { id: 'GNG001', nama: 'Gangsa', kategori: 'Metalofon', deskripsi: 'Instrumen melodi yang dimainkan dengan pemukul', material: 'Perunggu', fungsi: 'Melodi', image: 'https://dewatiket.id/blog/wp-content/uploads/2023/11/gangsa.jpg.webp' },
+                { id: 'RNG001', nama: 'Reong', kategori: 'Rangkaian Gong', deskripsi: 'Sekumpulan gong kecil berpencu yang dimainkan bersama', material: 'Perunggu', fungsi: 'Hiasan Melodi', image: 'data:image/jpeg;base64,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' },
+                { id: 'PNC001', nama: 'Penyacah', kategori: 'Metalofon', deskripsi: 'Instrumen yang memainkan pola interlocking (kotekan)', material: 'Perunggu', fungsi: 'Iringan Ritmis', image: 'https://is4-ssl.mzstatic.com/image/thumb/Purple113/v4/32/d6/c9/32d6c97d-28bb-d335-3096-353a8fe8f2be/source/256x256bb.jpg' },
+                { id: 'JGG001', nama: 'Jegog', kategori: 'Metalofon Bass', deskripsi: 'Instrumen berukuran besar untuk suara nada rendah', material: 'Perunggu', fungsi: 'Suara Bass', image: 'https://is1-ssl.mzstatic.com/image/thumb/PurpleSource126/v4/6a/51/7a/6a517aae-2c0b-8e91-e4f9-8aac8992744d/073de369-7396-4704-8582-471c8158fbc6_Simulator_Screenshot_-_iPhone_14_Pro_Max_-_2023-07-02_at_22.11.49.png/643x0w.jpg' },
+                { id: 'KMP001', nama: 'Kempur', kategori: 'Gong', deskripsi: 'Gong besar yang digunakan untuk menandai irama utama', material: 'Perunggu', fungsi: 'Penanda Irama', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQWlUgfgdlXipTcajvrdhNAIU7hLCqV_vCduQ&s' },
+                { id: 'KCK001', nama: 'Kecek', kategori: 'Simbal', deskripsi: 'Simbal kecil untuk menjaga tempo', material: 'Logam', fungsi: 'Pengendali irama dan pengatur tempo', image: 'https://dictionary.basabali.org/w/images/dictionary.basabali.org!w/thumb/4/4b/Kecekk.jpg/250px-Kecekk.jpg' }
+            ];
+            const Encyclopedia = {
+                elements: {
+                    listContainer: document.getElementById('gamelan-list-container'),
+                    searchInput: document.getElementById('search-gamelan'),
+                    modalOverlay: document.getElementById('modal-overlay'),
+                    modalContent: document.getElementById('modal-content'),
+                },
+                init() {
+                    this.renderList(gamelanData);
+                    this.elements.searchInput.addEventListener('input', (e) => this.filterByName(e.target.value));
+                    this.elements.modalOverlay.addEventListener('click', (e) => { if (e.target === this.elements.modalOverlay) this.closeModal(); });
+                },
+                filterByName(query) {
+                    const q = query.toLowerCase();
+                    const filtered = gamelanData.filter(g => g.nama.toLowerCase().includes(q));
+                    this.renderList(filtered);
+                },
+                renderList(data) {
+                    this.elements.listContainer.innerHTML = data.length 
+                        ? data.map(g => this.createCard(g)).join('')
+                        : '<p class="text-center col-span-full text-stone-500">Tidak ada gamelan yang cocok.</p>';
+                    this.elements.listContainer.querySelectorAll('.gamelan-card').forEach(card => card.addEventListener('click', () => this.showModal(card.dataset.id)));
+                },
+                createCard(gamelan) {
+                    return `<div class="gamelan-card" data-id="${gamelan.id}"><img src="${gamelan.image}" alt="${gamelan.nama}" onerror="this.onerror=null;this.src='https://placehold.co/300x300/f87171/white?text=Error';"><div class="ml-4"><h4 class="font-kreon text-lg font-semibold">${gamelan.nama}</h4><p class="text-sm text-stone-600 truncate">${gamelan.kategori}</p><p class="text-xs text-stone-400 mt-1">${gamelan.fungsi}</p></div></div>`;
+                },
+                showModal(gamelanId) {
+                    const gamelan = gamelanData.find(g => g.id === gamelanId);
+                    if (!gamelan) return;
+                    this.elements.modalContent.innerHTML = `
+                        <div class="flex justify-between items-start">
+                             <h2 class="text-3xl font-kreon font-bold mb-4">${gamelan.nama}</h2>
+                             <button id="close-modal-btn" class="p-1 rounded-full hover:bg-stone-200 transition-colors"><i data-lucide="x" class="w-6 h-6"></i></button>
+                        </div>
+                        <img src="${gamelan.image}" alt="${gamelan.nama}" class="w-full h-auto rounded-lg object-cover mb-4" onerror="this.onerror=null;this.src='https://placehold.co/600x400/f87171/white?text=Error';">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 pt-4">
+                            ${this.createModalRow('tag', 'Kategori', gamelan.kategori)}
+                            ${this.createModalRow('file-text', 'Deskripsi', gamelan.deskripsi)}
+                            ${this.createModalRow('hammer', 'Material', gamelan.material)}
+                            ${this.createModalRow('music-4', 'Fungsi', gamelan.fungsi)}
+                        </div>`;
+                    lucide.createIcons();
+                    document.getElementById('close-modal-btn').addEventListener('click', () => this.closeModal());
+                    this.elements.modalOverlay.classList.add('visible');
+                },
+                closeModal() { this.elements.modalOverlay.classList.remove('visible'); },
+                createModalRow(icon, label, value) {
+                    return `<div class="flex items-start py-2 border-b border-stone-100"><i data-lucide="${icon}" class="w-5 h-5 text-orange-500 mt-1 mr-3 flex-shrink-0"></i><div><p class="font-semibold text-sm text-stone-500">${label}</p><p class="font-medium text-stone-800">${value}</p></div></div>`;
+                },
+            }
+            const App = {
+                elements: {
+                    countyIcons: document.querySelectorAll('.county-icon'),
+                    gamelanListTitle: document.getElementById('gamelan-list-title'),
+                    gamelanListContainer: document.getElementById('gamelan-list-container'),
+                    searchInput: document.getElementById('search-gamelan'),
+                    modalOverlay: document.getElementById('modal-overlay'),
+                    modalContent: document.getElementById('modal-content'),
+                    eraFilterButtons: document.querySelectorAll('.era-filter-btn'),
+                    // ==== Elemen UI untuk Detector (Diambil dari website pertama) ====
+                    detectorStatus: document.getElementById('detector-status'),
+                    detectorResult: document.getElementById('detector-result'),
+                    detectorActionBtn: document.getElementById('detector-action-btn'),
+                    detectorBtnText: document.getElementById('detector-btn-text'),
+                    detectorBtnIcon: document.getElementById('detector-btn-icon'),
+                    allDescriptions: document.querySelectorAll('.gamelan-description'),
+                },
+                activeRegion: null,
+                activeEra: 'Semua',
+
+                init() {
+                    this.renderGamelanList(gamelanData);
+                    this.setupEventListeners();
+                    this.Detector.init(this); // Inisialisasi modul AI
+                    lucide.createIcons();
+                },
+
+                setupEventListeners() {
+                    this.elements.countyIcons.forEach(icon => icon.addEventListener('click', (e) => this.filterByRegion(e.currentTarget.dataset.name)));
+                    this.elements.searchInput.addEventListener('input', (e) => this.filterByName(e.target.value));
+                    this.elements.modalOverlay.addEventListener('click', (e) => { if (e.target === this.elements.modalOverlay) this.closeModal(); });
+                    this.elements.eraFilterButtons.forEach(btn => btn.addEventListener('click', (e) => this.filterByEra(e.currentTarget.dataset.era)));
+                    // Event listener untuk tombol detektor baru
+                    this.elements.detectorActionBtn.addEventListener('click', () => this.Detector.handleButtonClick());
+                },
+                
+                resetFilters() {
+                    this.activeRegion = null;
+                    this.elements.countyIcons.forEach(icon => icon.classList.remove('active'));
+                    this.elements.searchInput.value = '';
+                    if (this.activeEra === 'Semua') {
+                        this.elements.gamelanListTitle.textContent = 'Menampilkan Semua Gamelan';
+                    }
+                },
+                
+                filterByEra(era) {
+                    this.activeEra = era;
+                    this.elements.eraFilterButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.era === era));
+                    this.resetFilters();
+                    
+                    let data = gamelanData;
+                    if (era !== 'Semua') {
+                        data = gamelanData.filter(g => g.zaman === era);
+                        this.elements.gamelanListTitle.textContent = `Menampilkan Gamelan Kelompok ${era}`;
+                    }
+                    this.renderGamelanList(data);
+                },
+
+                filterByRegion(regionName) {
+                    this.activeEra = 'Semua';
+                    this.elements.eraFilterButtons.forEach(btn => { btn.classList.remove('active'); });
+                    this.elements.eraFilterButtons[0].classList.add('active');
+                    
+                    if (this.activeRegion === regionName) {
+                        this.activeRegion = null;
+                        this.elements.countyIcons.forEach(icon => icon.classList.remove('active'));
+                        this.elements.gamelanListTitle.textContent = 'Menampilkan Semua Gamelan';
+                        this.renderGamelanList(gamelanData);
+                    } else {
+                        this.activeRegion = regionName;
+                        this.elements.countyIcons.forEach(icon => icon.classList.toggle('active', icon.dataset.name === regionName));
+                        this.elements.gamelanListTitle.textContent = `Gamelan yang berasal dari ${regionName}`;
+                        const filtered = gamelanData.filter(g => g.asal.toLowerCase().includes(regionName.toLowerCase()));
+                        this.renderGamelanList(filtered);
+                    }
+                     this.elements.searchInput.value = '';
+                },
+                
+                filterByName(query) {
+                    this.resetFilters();
+                    this.activeEra = 'Semua';
+                    this.elements.eraFilterButtons.forEach(btn => { btn.classList.remove('active'); });
+                    this.elements.eraFilterButtons[0].classList.add('active');
+
+                    const q = query.toLowerCase();
+                    const filtered = gamelanData.filter(g => g.nama.toLowerCase().includes(q));
+                    this.renderGamelanList(filtered);
+                },
+
+                renderGamelanList(data) {
+                    this.elements.gamelanListContainer.innerHTML = data.length 
+                        ? data.map(g => this.createGamelanCard(g)).join('')
+                        : '<p class="text-center col-span-full text-stone-500">Tidak ada gamelan yang cocok.</p>';
+                    
+                    document.querySelectorAll('.gamelan-card').forEach(card => card.addEventListener('click', () => this.showModal(parseInt(card.dataset.id))));
+                },
+
+                createGamelanCard(gamelan) {
+                    return `<div class="gamelan-card" data-id="${gamelan.id}"><img src="${gamelan.image}" alt="${gamelan.nama}" onerror="this.onerror=null;this.src='https://placehold.co/300x300/f87171/white?text=Error';"><div class="ml-4"><h4 class="font-kreon text-lg font-semibold">${gamelan.nama}</h4><p class="text-sm text-stone-600 truncate">${gamelan.fungsi}</p><p class="text-xs text-stone-400 mt-1">${gamelan.asal}</p></div></div>`;
+                },
+
+                showModal(gamelanId) {
+                    const gamelan = gamelanData.find(g => g.id === gamelanId);
+                    if (!gamelan) return;
+                    // Pemutar audio telah dihapus dari sini
+                    this.elements.modalContent.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <h2 class="text-3xl font-kreon font-bold mb-4">${gamelan.nama}</h2>
+                            <button id="close-modal-btn" class="p-1 rounded-full hover:bg-stone-200 transition-colors"><i data-lucide="x" class="w-6 h-6"></i></button>
+                        </div>
+                        <img src="${gamelan.image}" alt="${gamelan.nama}" class="w-full h-auto rounded-lg object-cover mb-4" onerror="this.onerror=null;this.src='https://placehold.co/600x400/f87171/white?text=Error';">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 pt-4">
+                            ${this.createModalRow('tag', 'Kategori', gamelan.kategori)}
+                            ${this.createModalRow('file-text', 'Deskripsi', gamelan.deskripsi)}
+                            ${this.createModalRow('hammer', 'Material', gamelan.material)}
+                            ${this.createModalRow('music-4', 'Fungsi', gamelan.fungsi)}
+                        </div>`;
+                    lucide.createIcons();
+                    document.getElementById('close-modal-btn').addEventListener('click', () => this.closeModal());
+                    this.elements.modalOverlay.classList.add('visible');
+                },
+                closeModal() { this.elements.modalOverlay.classList.remove('visible'); },
+                createModalRow(icon, label, value) {
+                    return `<div class="flex items-start py-2 border-b border-stone-100"><i data-lucide="${icon}" class="w-5 h-5 text-orange-500 mt-1 mr-3 flex-shrink-0"></i><div><p class="font-semibold text-sm text-stone-500">${label}</p><p class="font-medium text-stone-800">${value}</p></div></div>`;
+                },
+
+                // ==== MODUL DETECTOR AI BARU (LOGIKA DARI WEBSITE PERTAMA) ====
+                Detector: {
+                    parent: null,
+                    recognizer: null,
+                    classLabels: [],
+                    currentState: 'idle', // idle, loading, listening
+                    
+                    icons: {
+                        play: '<path d="M8 5v14l11-7z"></path>',
+                        stop: '<path d="M6 6h12v12H6z"></path>',
+                        loading: '<path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" class="animate-spin origin-center"></path>',
+                    },
+
+                    init(parentApp) {
+                        this.parent = parentApp;
+                        this.updateUI('idle', 'Model AI siap. Klik "Mulai" untuk merekam.');
+                    },
+
+                    async loadAndStart() {
+                        this.updateUI('loading');
+                        try {
+                            // PENTING: Pastikan file model.json dan metadata.json ada di folder yang sama dengan file HTML ini
+                            // atau ganti URL di bawah dengan link absolut ke model Anda.
+                            const URL = window.location.href.substring(0, window.location.href.lastIndexOf("/") + 1);
+                            const modelURL = URL + "model.json";
+                            const metadataURL = URL + "metadata.json";
+
+                            this.recognizer = speechCommands.create("BROWSER_FFT", undefined, modelURL, metadataURL);
+                            await this.recognizer.ensureModelLoaded();
+                            this.classLabels = this.recognizer.wordLabels();
+                            this.startListening();
+                        } catch (error) {
+                            console.error("Gagal memuat model AI:", error);
+                            this.updateUI('idle', 'Gagal memuat model. Coba refresh halaman.');
+                        }
+                    },
+                    
+                    handleButtonClick() {
+                        if (this.currentState === 'idle') {
+                            if (!this.recognizer) {
+                                this.loadAndStart();
+                            } else {
+                                this.startListening();
+                            }
+                        } else {
+                            this.stopListening();
+                        }
+                    },
+
+                    startListening() {
+                        if (this.currentState !== 'idle' && this.currentState !== 'loading') return;
+                        this.updateUI('listening');
+                        
+                        this.recognizer.listen(result => {
+                            const scores = Array.from(result.scores);
+                            const maxScore = Math.max(...scores);
+                            const maxIndex = scores.indexOf(maxScore);
+                            const predictedClass = this.classLabels[maxIndex];
+
+                            if (predictedClass !== '_background_noise_' && maxScore > 0.85) {
+                                this.displayResult(predictedClass);
+                                this.stopListening(); // Otomatis berhenti setelah menemukan hasil
+                            }
+                        }, {
+                            includeSpectrogram: false,
+                            probabilityThreshold: 0.75,
+                            overlapFactor: 0.50
+                        });
+                    },
+                    
+                    stopListening() {
+                        if (this.recognizer && this.recognizer.isListening()) {
+                            this.recognizer.stopListening();
+                        }
+                        this.updateUI('idle', 'Klik "Mulai" untuk mendeteksi lagi.');
+                    },
+                 
+                    displayResult(className) {
+                        this.parent.elements.detectorResult.textContent = className;
+                        
+                        this.parent.elements.allDescriptions.forEach(desc => desc.style.display = 'none');
+
+                        const descriptionToShow = document.getElementById(className);
+                        if (descriptionToShow) {
+                            descriptionToShow.style.display = 'block';
+                        }
+                    },
+
+                    updateUI(state, statusText) {
+                        this.currentState = state;
+                        const { detectorStatus, detectorActionBtn, detectorBtnText, detectorBtnIcon, allDescriptions } = this.parent.elements;
+                        
+                        if (statusText) detectorStatus.textContent = statusText;
+                        detectorActionBtn.disabled = false;
+                        detectorActionBtn.classList.remove('bg-red-500', 'hover:bg-red-600');
+                        detectorActionBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+
+                        switch (state) {
+                            case 'loading':
+                                detectorActionBtn.disabled = true;
+                                detectorBtnIcon.innerHTML = this.icons.loading;
+                                detectorBtnText.textContent = 'Memuat...';
+                                break;
+                            case 'listening':
+                                detectorActionBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                                detectorActionBtn.classList.add('bg-red-500', 'hover:bg-red-600');
+                                detectorBtnIcon.innerHTML = this.icons.stop;
+                                detectorBtnText.textContent = 'Stop';
+                                this.parent.elements.detectorResult.textContent = '...';
+                                allDescriptions.forEach(desc => desc.style.display = 'none');
+                                break;
+                            case 'idle':
+                            default:
+                                detectorBtnIcon.innerHTML = this.icons.play;
+                                detectorBtnText.textContent = 'Mulai';
+                                break;
+                        }
+                    }
+                }
+            };       
+            App.init();
+            Encyclopedia.init();   
+        });
+    </script>
+</body>
+</html>
+
+
+            Detector.init();
+        });
+    </script>
+</body>
+</html>
